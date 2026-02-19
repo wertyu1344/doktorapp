@@ -48,7 +48,12 @@ This section is optimized for AI agents setting up the project in a virtual envi
 - **Android SDK:** API Level 33+ (Android 13)
 - **CocoaPods:** (For iOS only) `1.12.0+`
 
-### 🚀 Direct Setup Steps
+### � Test Credentials
+For quick evaluation, you can use the following test account:
+- **Email:** `omersaidakcin@gmail.com`
+- **Password:** `123123`
+
+### �🚀 Direct Setup Steps
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/wertyu1344/doktorapp.git
