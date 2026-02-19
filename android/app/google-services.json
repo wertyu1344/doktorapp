@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "163018685273",
+    "project_id": "doktorapp-dental",
+    "storage_bucket": "doktorapp-dental.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:163018685273:android:943f211221737ce7732a48",
+        "android_client_info": {
+          "package_name": "com.example.doktorapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAw4TCKwie885a_neta_Pzi_jcxJdHHaMo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
