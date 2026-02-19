@@ -178,7 +178,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                       labelText: 'Cinsiyet',
                       prefixIcon: Icon(Icons.wc),
                     ),
-                    items: ['Erkek', 'Kadın', 'Diğer']
+                    items: ['Erkek', 'Kadın']
                         .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                         .toList(),
                     onChanged: (v) => setState(() => _cinsiyet = v!),

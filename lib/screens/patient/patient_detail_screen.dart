@@ -4,10 +4,12 @@ import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../models/patient.dart';
+import '../../models/dental_evaluation.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
 import '../evaluation/dental_evaluation_screen.dart';
 import '../evaluation/general_evaluation_screen.dart';
+import '../evaluation/evaluation_detail_screen.dart';
 
 class PatientDetailScreen extends StatefulWidget {
   final String patientId;
@@ -23,14 +25,15 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
   bool _isUploadingPhoto = false;
   int _currentPhotoIndex = 0;
   final PageController _photoPageController = PageController();
+  late final Stream<Patient> _patientStream;
 
-  final List<String> _photoLabels = [
-    'Ön Ağız İçi Fotoğraf',
-    'Üst Oklüzal Fotoğraf',
-    'Alt Oklüzal Fotoğraf',
-    'Sağ Lateral Fotoğraf',
-    'Sol Lateral Fotoğraf',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _patientStream = _firestoreService.getPatientsStream().map(
+      (patients) => patients.firstWhere((p) => p.id == widget.patientId),
+    );
+  }
 
   @override
   void dispose() {
@@ -41,9 +44,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<Patient>(
-      stream: _firestoreService.getPatientsStream().map(
-        (patients) => patients.firstWhere((p) => p.id == widget.patientId),
-      ),
+      stream: _patientStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
@@ -139,6 +140,10 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                       _buildAnamnezCard(patient),
                       const SizedBox(height: 16),
 
+                      // Muayene Geçmişi
+                      _buildEvaluationsCard(patient),
+                      const SizedBox(height: 16),
+
                       // Fotoğraf Yönetimi
                       _buildPhotoManagementCard(patient),
                       const SizedBox(height: 16),
@@ -194,15 +199,23 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
     return Stack(
       children: [
         PageView.builder(
+          key: ValueKey('photo_carousel_${patient.fotograflar.length}'),
           controller: _photoPageController,
           itemCount: patient.fotograflar.length,
-          onPageChanged: (index) => setState(() => _currentPhotoIndex = index),
+          onPageChanged: (index) {
+            if (mounted) {
+              setState(() => _currentPhotoIndex = index);
+            }
+          },
           itemBuilder: (context, index) {
+            if (index >= patient.fotograflar.length)
+              return const SizedBox.shrink();
+            final photo = patient.fotograflar[index];
             return GestureDetector(
               onTap: () =>
                   _showFullScreenPhoto(context, patient.fotograflar, index),
               child: CachedNetworkImage(
-                imageUrl: patient.fotograflar[index],
+                imageUrl: photo.url,
                 fit: BoxFit.cover,
                 placeholder: (context, url) => Container(
                   color: Colors.grey.shade200,
@@ -229,9 +242,12 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              _currentPhotoIndex < _photoLabels.length
-                  ? _photoLabels[_currentPhotoIndex]
-                  : 'Fotoğraf ${_currentPhotoIndex + 1}',
+              (patient.fotograflar.isNotEmpty &&
+                      _currentPhotoIndex < patient.fotograflar.length)
+                  ? (patient.fotograflar[_currentPhotoIndex].label.isEmpty
+                        ? 'Fotoğraf ${_currentPhotoIndex + 1}'
+                        : patient.fotograflar[_currentPhotoIndex].label)
+                  : 'Fotoğraf',
               style: GoogleFonts.poppins(
                 color: Colors.white,
                 fontSize: 13,
@@ -724,19 +740,30 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
       }
 
       if (imageFile != null) {
-        final url = await _storageService.uploadPatientPhoto(
-          patient.id,
-          imageFile,
-        );
-        await _firestoreService.addPhotoToPatient(patient.id, url);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Fotoğraf başarıyla eklendi'),
-              backgroundColor: Colors.green.shade600,
-              behavior: SnackBarBehavior.floating,
-            ),
+          final label = await _showLabelDialog();
+          if (label == null) {
+            setState(() => _isUploadingPhoto = false);
+            return;
+          }
+
+          final url = await _storageService.uploadPatientPhoto(
+            patient.id,
+            imageFile,
           );
+          await _firestoreService.addPhotoToPatient(
+            patient.id,
+            PatientPhoto(url: url, label: label),
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Fotoğraf başarıyla eklendi'),
+                backgroundColor: Colors.green.shade600,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
         }
       }
     } catch (e) {
@@ -752,6 +779,56 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
     } finally {
       if (mounted) setState(() => _isUploadingPhoto = false);
     }
+  }
+
+  Future<String?> _showLabelDialog() async {
+    final controller = TextEditingController();
+    return await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Fotoğraf Başlığı',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Bu fotoğraf için bir başlık girin (örn: Ön Ağız İçi, Üst Çene vb.)',
+              style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                hintText: 'Başlık girin...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('İptal', style: GoogleFonts.poppins()),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              Navigator.pop(context, text.isEmpty ? 'Fotoğraf' : text);
+            },
+            child: Text('Kaydet', style: GoogleFonts.poppins()),
+          ),
+        ],
+      ),
+    );
   }
 
   void _editAnamnez(Patient patient) {
@@ -779,13 +856,12 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              await _firestoreService.updateAnamnez(
-                patient.id,
-                controller.text.trim(),
-              );
+              final newAnamnez = controller.text.trim();
+              await _firestoreService.updateAnamnez(patient.id, newAnamnez);
               if (mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
+                final scaffold = ScaffoldMessenger.of(context);
+                Navigator.of(context).pop();
+                scaffold.showSnackBar(
                   SnackBar(
                     content: const Text('Anamnez güncellendi'),
                     backgroundColor: Colors.green.shade600,
@@ -799,6 +875,333 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildEvaluationsCard(Patient patient) {
+    return StreamBuilder<List<DentalEvaluation>>(
+      stream: _firestoreService.getEvaluationsStream(patient.id),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: CircularProgressIndicator(color: Color(0xFFD32F2F)),
+            ),
+          );
+        }
+
+        final evaluations = snapshot.data ?? [];
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD32F2F).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.history_outlined,
+                      color: Color(0xFFD32F2F),
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Muayene Geçmişi',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFFD32F2F),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (evaluations.isEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Text(
+                      'Henüz kaydedilmiş muayene bulunmuyor.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: Colors.grey.shade400,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: evaluations.length,
+                  separatorBuilder: (context, index) =>
+                      const Divider(height: 24),
+                  itemBuilder: (context, index) {
+                    final eval = evaluations[index];
+                    return InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EvaluationDetailScreen(
+                              evaluation: eval,
+                              patient: patient,
+                            ),
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    DateFormat(
+                                      'dd MMMM yyyy HH:mm',
+                                      'tr_TR',
+                                    ).format(eval.olusturmaTarihi),
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Detay için tıklayın',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 11,
+                                      color: const Color(0xFFD32F2F),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              IconButton(
+                                onPressed: () => _deleteEvaluation(eval.id),
+                                icon: Icon(
+                                  Icons.delete_outline,
+                                  size: 18,
+                                  color: Colors.grey.shade400,
+                                ),
+                                constraints: const BoxConstraints(),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+
+                          // Diş Bulguları (Özet)
+                          if (eval.disNotlari.isNotEmpty) ...[
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: eval.disNotlari.entries.take(3).map((
+                                entry,
+                              ) {
+                                return Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: Colors.grey.shade200,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 28,
+                                        height: 28,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFD32F2F),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            entry.key,
+                                            style: GoogleFonts.poppins(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          entry.value.join(', '),
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 12,
+                                            color: const Color(0xFF424242),
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+
+                          // Diş Eti Muayenesi
+                          if (eval.disEtiMuayenesi.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            _evaluationMiniRow(
+                              Icons.health_and_safety_outlined,
+                              'Diş Eti',
+                              eval.disEtiMuayenesi,
+                            ),
+                          ],
+
+                          // Periodontal Muayene
+                          if (eval.periodontalMuayene.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            _evaluationMiniRow(
+                              Icons.biotech_outlined,
+                              'Periodontal',
+                              eval.periodontalMuayene,
+                            ),
+                          ],
+
+                          // Genel Notlar
+                          if (eval.genelNotlar.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: Colors.orange.withValues(alpha: 0.1),
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(
+                                    Icons.sticky_note_2_outlined,
+                                    size: 16,
+                                    color: Colors.orange,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      eval.genelNotlar,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade800,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _evaluationMiniRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: const Color(0xFFD32F2F)),
+        const SizedBox(width: 6),
+        Text(
+          '$label: ',
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: const Color(0xFF212121),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _deleteEvaluation(String evaluationId) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Silmeyi Onayla'),
+        content: const Text(
+          'Bu muayene kaydını silmek istediğinize emin misiniz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sil', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _firestoreService.deleteEvaluation(
+          widget.patientId,
+          evaluationId,
+        );
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(content: Text('Kayıt silindi')),
+        );
+      } catch (e) {
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Hata: $e')));
+      }
+    }
   }
 
   void _showOptionsMenu(BuildContext context, Patient patient) {
@@ -824,13 +1227,16 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
               const SizedBox(height: 20),
               ListTile(
                 leading: const Icon(
-                  Icons.edit_outlined,
+                  Icons.label_outline,
                   color: Color(0xFFD32F2F),
                 ),
-                title: Text('Bilgileri Düzenle', style: GoogleFonts.poppins()),
+                title: Text(
+                  'Fotoğraf Başlığını Düzenle',
+                  style: GoogleFonts.poppins(),
+                ),
                 onTap: () {
                   Navigator.pop(context);
-                  // TODO: Edit patient
+                  _editPhotoLabel(patient);
                 },
               ),
               if (patient.fotograflar.isNotEmpty &&
@@ -840,11 +1246,11 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                   title: Text('Bu Fotoğrafı Sil', style: GoogleFonts.poppins()),
                   onTap: () async {
                     Navigator.pop(context);
-                    final photoUrl = patient.fotograflar[_currentPhotoIndex];
-                    await _storageService.deletePhoto(photoUrl);
+                    final photo = patient.fotograflar[_currentPhotoIndex];
+                    await _storageService.deletePhoto(photo.url);
                     await _firestoreService.removePhotoFromPatient(
                       patient.id,
-                      photoUrl,
+                      photo,
                     );
                     setState(() => _currentPhotoIndex = 0);
                   },
@@ -856,9 +1262,52 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
     );
   }
 
+  void _editPhotoLabel(Patient patient) async {
+    final photo = patient.fotograflar[_currentPhotoIndex];
+    final controller = TextEditingController(text: photo.label);
+
+    final newLabel = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Başlığı Düzenle',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        content: TextField(
+          controller: controller,
+          textCapitalization: TextCapitalization.words,
+          decoration: InputDecoration(
+            hintText: 'Yeni başlık girin...',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('İptal', style: GoogleFonts.poppins()),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: Text('Güncelle', style: GoogleFonts.poppins()),
+          ),
+        ],
+      ),
+    );
+
+    if (newLabel != null && newLabel.isNotEmpty) {
+      await _firestoreService.updatePhotoLabel(patient.id, photo.url, newLabel);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Başlık güncellendi')));
+      }
+    }
+  }
+
   void _showFullScreenPhoto(
     BuildContext context,
-    List<String> photos,
+    List<PatientPhoto> photos,
     int initialIndex,
   ) {
     Navigator.push(
@@ -870,16 +1319,16 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
             backgroundColor: Colors.black,
             foregroundColor: Colors.white,
             title: Text(
-              initialIndex < _photoLabels.length
-                  ? _photoLabels[initialIndex]
-                  : 'Fotoğraf ${initialIndex + 1}',
+              photos[initialIndex].label.isEmpty
+                  ? 'Fotoğraf ${initialIndex + 1}'
+                  : photos[initialIndex].label,
               style: GoogleFonts.poppins(fontSize: 16),
             ),
           ),
           body: InteractiveViewer(
             child: Center(
               child: CachedNetworkImage(
-                imageUrl: photos[initialIndex],
+                imageUrl: photos[initialIndex].url,
                 fit: BoxFit.contain,
                 placeholder: (context, url) => const Center(
                   child: CircularProgressIndicator(color: Colors.white),

@@ -50,16 +50,40 @@ class FirestoreService {
     await _patientsRef.doc(patientId).delete();
   }
 
-  Future<void> addPhotoToPatient(String patientId, String photoUrl) async {
+  Future<void> addPhotoToPatient(String patientId, PatientPhoto photo) async {
     await _patientsRef.doc(patientId).update({
-      'fotograflar': FieldValue.arrayUnion([photoUrl]),
+      'fotograflar': FieldValue.arrayUnion([photo.toMap()]),
       'guncellemeTarihi': Timestamp.now(),
     });
   }
 
-  Future<void> removePhotoFromPatient(String patientId, String photoUrl) async {
+  Future<void> removePhotoFromPatient(
+    String patientId,
+    PatientPhoto photo,
+  ) async {
     await _patientsRef.doc(patientId).update({
-      'fotograflar': FieldValue.arrayRemove([photoUrl]),
+      'fotograflar': FieldValue.arrayRemove([photo.toMap()]),
+      'guncellemeTarihi': Timestamp.now(),
+    });
+  }
+
+  Future<void> updatePhotoLabel(
+    String patientId,
+    String photoUrl,
+    String newLabel,
+  ) async {
+    final doc = await _patientsRef.doc(patientId).get();
+    final patient = Patient.fromFirestore(doc);
+
+    final updatedPhotos = patient.fotograflar.map((p) {
+      if (p.url == photoUrl) {
+        return PatientPhoto(url: p.url, label: newLabel);
+      }
+      return p;
+    }).toList();
+
+    await _patientsRef.doc(patientId).update({
+      'fotograflar': updatedPhotos.map((p) => p.toMap()).toList(),
       'guncellemeTarihi': Timestamp.now(),
     });
   }

@@ -1,5 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+class PatientPhoto {
+  final String url;
+  final String label;
+
+  PatientPhoto({required this.url, required this.label});
+
+  factory PatientPhoto.fromMap(Map<String, dynamic> map) {
+    return PatientPhoto(url: map['url'] ?? '', label: map['label'] ?? '');
+  }
+
+  Map<String, String> toMap() {
+    return {'url': url, 'label': label};
+  }
+}
+
 class Patient {
   final String id;
   final String hastaNo;
@@ -9,7 +24,7 @@ class Patient {
   final DateTime dogumTarihi;
   final String bolge;
   final String anamnez;
-  final List<String> fotograflar;
+  final List<PatientPhoto> fotograflar;
   final String doktorId;
   final DateTime olusturmaTarihi;
   final DateTime guncellemeTarihi;
@@ -52,7 +67,14 @@ class Patient {
       dogumTarihi: (data['dogumTarihi'] as Timestamp).toDate(),
       bolge: data['bolge'] ?? '',
       anamnez: data['anamnez'] ?? '',
-      fotograflar: List<String>.from(data['fotograflar'] ?? []),
+      fotograflar:
+          (data['fotograflar'] as List<dynamic>?)?.map((item) {
+            if (item is String) {
+              return PatientPhoto(url: item, label: '');
+            }
+            return PatientPhoto.fromMap(item as Map<String, dynamic>);
+          }).toList() ??
+          [],
       doktorId: data['doktorId'] ?? '',
       olusturmaTarihi: (data['olusturmaTarihi'] as Timestamp).toDate(),
       guncellemeTarihi: (data['guncellemeTarihi'] as Timestamp).toDate(),
@@ -68,7 +90,7 @@ class Patient {
       'dogumTarihi': Timestamp.fromDate(dogumTarihi),
       'bolge': bolge,
       'anamnez': anamnez,
-      'fotograflar': fotograflar,
+      'fotograflar': fotograflar.map((p) => p.toMap()).toList(),
       'doktorId': doktorId,
       'olusturmaTarihi': Timestamp.fromDate(olusturmaTarihi),
       'guncellemeTarihi': Timestamp.fromDate(guncellemeTarihi),
@@ -84,7 +106,7 @@ class Patient {
     DateTime? dogumTarihi,
     String? bolge,
     String? anamnez,
-    List<String>? fotograflar,
+    List<PatientPhoto>? fotograflar,
     String? doktorId,
     DateTime? olusturmaTarihi,
     DateTime? guncellemeTarihi,
