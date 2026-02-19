@@ -37,54 +37,54 @@ Diş hekimleri için geliştirilen, hasta kayıtları, ağız içi fotoğraf yö
 - **intl** (Tarih formatlama)
 - **uuid** (Benzersiz ID üretimi)
 
-## 📦 Kurulum & Çalıştırma
+## 🤖 AI Agent Setup & VM Installation Guide
 
-### Gereksinimler
-- Flutter SDK (3.10+)
-- Firebase projesi
-- Android Studio veya VS Code
+This section is optimized for AI agents setting up the project in a virtual environment.
 
-### Adımlar
+### 🛠 Environment Requirements
+- **Flutter SDK:** `3.38.3` (Stable Channel)
+- **Dart SDK:** `3.10.1`
+- **Java JDK:** `OpenJDK 17`
+- **Android SDK:** API Level 33+ (Android 13)
+- **CocoaPods:** (For iOS only) `1.12.0+`
 
-1. **Repoyu klonlayın:**
-```bash
-git clone https://github.com/KULLANICI_ADI/doktorapp.git
-cd doktorapp
-```
+### 🚀 Direct Setup Steps
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/wertyu1344/doktorapp.git
+   cd doktorapp
+   ```
 
-2. **Firebase CLI kurulumu:**
-```bash
-dart pub global activate flutterfire_cli
-```
+2. **Clean and Fetch Dependencies:**
+   ```bash
+   flutter clean
+   flutter pub get
+   ```
 
-3. **Firebase yapılandırması:**
-```bash
-flutterfire configure
-```
-Bu komut `lib/firebase_options.dart` dosyasını otomatik oluşturacak.
+3. **Verify Firebase Configuration:**
+   - The project is **pre-configured** with Firebase.
+   - Essential files already included in the repo:
+     - `lib/firebase_options.dart` (Universal configuration)
+     - `android/app/google-services.json` (Android specific)
+   - *Note:* Authentication (Email/Password), Firestore, and Storage must be enabled in the Firebase Console for the linked project.
 
-4. **`google-services.json`** dosyasını `android/app/` klasörüne koyun.
+4. **Run the Application:**
+   ```bash
+   # For Android Emulator/Device
+   flutter run
+   ```
 
-5. **Firebase Console'da aktif edin:**
-   - Authentication → Email/Password
-   - Firestore Database
-   - Storage
+### 📱 Build & APK Location
+If you need to access the ready-to-use production build:
 
-6. **Bağımlılıkları yükleyin:**
-```bash
-flutter pub get
-```
-
-7. **Uygulamayı çalıştırın:**
-```bash
-flutter run
-```
-
-### APK Build
-
-```bash
-flutter build apk --release
-```
+- **Build Command:**
+  ```bash
+  flutter build apk --release
+  ```
+- **Release APK Path:** 
+  `build/app/outputs/flutter-apk/app-release.apk`
+  
+*(This APK contains all recent fixes including evaluation navigation and photo swipe optimizations.)*
 
 ## 📂 Proje Yapısı
 
@@ -110,7 +110,8 @@ lib/
 │   │   └── patient_detail_screen.dart # Hasta detay
 │   └── evaluation/
 │       ├── dental_evaluation_screen.dart  # Dental değerlendirme
-│       └── general_evaluation_screen.dart # Genel değerlendirme
+│       ├── general_evaluation_screen.dart # Genel değerlendirme
+│       └── evaluation_detail_screen.dart  # Muayene detay (YENİ)
 └── widgets/
     └── patient_card.dart            # Hasta kart widget'ı
 ```
